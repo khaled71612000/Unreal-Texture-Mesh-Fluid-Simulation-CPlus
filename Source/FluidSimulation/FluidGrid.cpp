@@ -5,6 +5,10 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "RHI.h"
+#include "RenderGraphResources.h"
+#include "RenderCommandFence.h"
+#include "RenderingThread.h"
 
 AFluidGrid::AFluidGrid()
 {
@@ -27,58 +31,72 @@ AFluidGrid::AFluidGrid()
 	}
 }
 
-void AFluidGrid::InitializeDynamicTexture()
+void AFluidGrid::InitializeRenderTarget()
 {
-	DynamicTexture = UTexture2D::CreateTransient(Size, Size, PF_B8G8R8A8);
-	if (DynamicTexture)
-	{
-		DynamicTexture->MipGenSettings = TMGS_NoMipmaps;
-		DynamicTexture->SRGB = false;
-		DynamicTexture->AddToRoot();
-		DynamicTexture->UpdateResource();
-	}
+	RenderTarget = NewObject<UTextureRenderTarget2D>();
+	RenderTarget->InitAutoFormat(Size, Size);
+	RenderTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+	RenderTarget->AddToRoot();
+	RenderTarget->UpdateResource();
 }
+
 void AFluidGrid::BeginPlay()
 {
 	Super::BeginPlay();
 
 	if (!BaseMaterial)
 	{
+		UE_LOG(LogTemp, Error, TEXT("BaseMaterial is not set."));
 		return;
 	}
 
-	InitializeDynamicTexture();
+	InitializeRenderTarget();
 
 	DynamicMaterialInstance = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 	if (DynamicMaterialInstance)
 	{
-		DynamicMaterialInstance->SetTextureParameterValue(FName("DynamicTexture"), DynamicTexture);
+		DynamicMaterialInstance->SetTextureParameterValue(FName("DynamicTexture"), RenderTarget);
 		PlaneComponent->SetMaterial(0, DynamicMaterialInstance);
 	}
-
-	//GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AFluidGrid::StepSimulation, Dt, true);
 }
 
 void AFluidGrid::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	Dt = DeltaSeconds * 1000;
 	StepSimulation();
+	UpdateRenderTarget();
+
+	HandleInput();
 }
 
-void AFluidGrid::UpdateTexture()
+void AFluidGrid::HandleInput()
 {
-	if (!DynamicTexture)
+	if (GetWorld()->GetFirstPlayerController()->IsInputKeyDown(EKeys::LeftMouseButton))
 	{
-		UE_LOG(LogTemp, Error, TEXT("DynamicTexture is not initialized."));
+		FVector2D MousePosition;
+		GetWorld()->GetFirstPlayerController()->GetMousePosition(MousePosition.X, MousePosition.Y);
+
+		FVector WorldPosition, WorldDirection;
+		GetWorld()->GetFirstPlayerController()->DeprojectScreenPositionToWorld(MousePosition.X, MousePosition.Y, WorldPosition, WorldDirection);
+
+		int32 GridX = FMath::Clamp(static_cast<int32>(WorldPosition.X), 0, Size - 1);
+		int32 GridY = FMath::Clamp(static_cast<int32>(WorldPosition.Y), 0, Size - 1);
+
+		AddDensity(GridX, GridY, 100.0f);
+	}
+}
+
+void AFluidGrid::UpdateRenderTarget()
+{
+	if (!RenderTarget)
+	{
+		UE_LOG(LogTemp, Error, TEXT("RenderTarget is not initialized."));
 		return;
 	}
 
-	FTexture2DMipMap& Mip = DynamicTexture->GetPlatformData()->Mips[0];
-	void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
-
-	TArray<FColor> ColorData;
+	FTextureRenderTargetResource* RenderTargetResource = RenderTarget->GameThread_GetRenderTargetResource();
+	TArray<FLinearColor> ColorData;
 	ColorData.SetNum(Size * Size);
 
 	for (int32 y = 0; y < Size; y++)
@@ -86,23 +104,39 @@ void AFluidGrid::UpdateTexture()
 		for (int32 x = 0; x < Size; x++)
 		{
 			float Value = Density[IX(x, y)];
-			uint8 Intensity = FMath::Clamp(Value * 255.0f, 0.0f, 255.0f);
-			ColorData[IX(x, y)] = FColor(Intensity, Intensity, Intensity, 255); // Ensure RGBA format
+			float Intensity = FMath::Clamp(Value, 0.0f, 1.0f);
+
+			FLinearColor Color;
+			Color.R = Intensity;
+			Color.G = 0.0f;
+			Color.B = 1.0f - Intensity;
+			Color.A = 1.0f;
+
+			ColorData[IX(x, y)] = Color;
 		}
 	}
 
-	FMemory::Memcpy(Data, ColorData.GetData(), ColorData.Num() * sizeof(FColor));
-	Mip.BulkData.Unlock();
-	DynamicTexture->UpdateResource();
-	UE_LOG(LogTemp, Log, TEXT("Updated texture with new density values."));
+	int32 LocalSize = Size;
+	ENQUEUE_RENDER_COMMAND(UpdateRenderTarget)(
+		[RenderTargetResource, ColorData, LocalSize](FRHICommandListImmediate& RHICmdList)
+		{
+			FUpdateTextureRegion2D UpdateRegion(0, 0, 0, 0, LocalSize, LocalSize);
+			int32 Pitch = LocalSize * sizeof(FLinearColor);
+			RHICmdList.UpdateTexture2D(
+				RenderTargetResource->GetRenderTargetTexture(), 0, UpdateRegion, Pitch, (uint8*)ColorData.GetData()
+			);
+		}
+		);
+
+	UE_LOG(LogTemp, Log, TEXT("Updated render target with new density values."));
 }
 
 void AFluidGrid::AddDensity(int32 x, int32 y, float amount)
 {
 	Density[IX(x, y)] += amount;
 	UE_LOG(LogTemp, Log, TEXT("Added Density at (%d, %d) = %f"), x, y, Density[IX(x, y)]);
-
 }
+
 void AFluidGrid::AddVelocity(int32 x, int32 y, float amountX, float amountY)
 {
 	int32 index = IX(x, y);
@@ -112,6 +146,8 @@ void AFluidGrid::AddVelocity(int32 x, int32 y, float amountX, float amountY)
 
 void AFluidGrid::StepSimulation()
 {
+	UE_LOG(LogTemp, Log, TEXT("Starting StepSimulation"));
+
 	AddDensity(Size / 2, Size / 2, 100.0f);
 	AddVelocity(Size / 2, Size / 2, 1.0f, 0.0f);
 
@@ -121,7 +157,6 @@ void AFluidGrid::StepSimulation()
 	TArray<float> Vy0 = Vy;
 	TArray<float> Density0 = Density;
 
-	// Log initial density at the center
 	UE_LOG(LogTemp, Log, TEXT("Initial Density at center = %f"), Density[IX(Size / 2, Size / 2)]);
 
 	Diffuse(1, Vx, Vx0, Viscosity, Dt);
@@ -139,19 +174,15 @@ void AFluidGrid::StepSimulation()
 	UE_LOG(LogTemp, Log, TEXT("Projected velocities again."));
 
 	Diffuse(0, Density, Density0, Diffusion, Dt);
-
-	// Log density after diffusion at the center
 	UE_LOG(LogTemp, Log, TEXT("Density after Diffusion at center = %f"), Density[IX(Size / 2, Size / 2)]);
 
 	Advect(0, Density, Density0, Vx, Vy, Dt);
-
-	// Log final density at the center
 	UE_LOG(LogTemp, Log, TEXT("Final Density at center = %f"), Density[IX(Size / 2, Size / 2)]);
 
 	UE_LOG(LogTemp, Log, TEXT("Advected density."));
 
-	UpdateTexture();
-	UE_LOG(LogTemp, Log, TEXT("Updated texture."));
+	UpdateRenderTarget();
+	UE_LOG(LogTemp, Log, TEXT("Updated render target."));
 }
 
 void AFluidGrid::Diffuse(int32 b, TArray<float>& x, TArray<float>& x0, float diff, float dt)
@@ -160,7 +191,6 @@ void AFluidGrid::Diffuse(int32 b, TArray<float>& x, TArray<float>& x0, float dif
 	UE_LOG(LogTemp, Log, TEXT("Diffuse: a = %f, diff = %f, dt = %f"), a, diff, dt);
 	LinearSolve(b, x, x0, a, 1 + 4 * a);
 
-	// Log density values after diffusion for the first few elements
 	for (int32 i = 0; i < FMath::Min(Size, 10); i++)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Diffuse: Density[%d] = %f"), i, x[i]);
@@ -244,7 +274,6 @@ void AFluidGrid::LinearSolve(int32 b, TArray<float>& x, TArray<float>& x0, float
 		SetBoundary(b, x);
 	}
 
-	// Log the results of LinearSolve for the first few elements
 	for (int32 i = 0; i < FMath::Min(Size, 10); i++)
 	{
 		UE_LOG(LogTemp, Log, TEXT("LinearSolve: x[%d] = %f"), i, x[i]);
@@ -261,7 +290,7 @@ void AFluidGrid::SetBoundary(int32 b, TArray<float>& x)
 	for (int32 j = 1; j < Size - 1; j++)
 	{
 		x[IX(0, j)] = b == 1 ? -x[IX(1, j)] : x[IX(1, j)];
-		x[IX(Size - 1, j)] = b == 1 ? -x[IX(Size - 2, j)] : x[IX(Size - 2, j)];
+		x[IX(Size - 1, j)] = b == 1 ? -x[IX(1, j)] : x[IX(Size - 2, j)];
 	}
 
 	x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
