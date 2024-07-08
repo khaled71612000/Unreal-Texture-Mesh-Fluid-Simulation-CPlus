@@ -23,7 +23,7 @@ AFluidGrid::AFluidGrid()
 	if (PlaneMeshAsset.Succeeded())
 	{
 		PlaneComponent->SetStaticMesh(PlaneMeshAsset.Object);
-		PlaneComponent->SetWorldScale3D(FVector(5.0f, 5.0f, 1.0f));
+		PlaneComponent->SetWorldScale3D(FVector(1.0f, 1.0f, 1.0f));
 	}
 }
 
@@ -32,15 +32,10 @@ void AFluidGrid::InitializeDynamicTexture()
 	DynamicTexture = UTexture2D::CreateTransient(Size, Size, PF_B8G8R8A8);
 	if (DynamicTexture)
 	{
-		DynamicTexture->CompressionSettings = TC_VectorDisplacementmap;
+		DynamicTexture->MipGenSettings = TMGS_NoMipmaps;
 		DynamicTexture->SRGB = false;
 		DynamicTexture->AddToRoot();
 		DynamicTexture->UpdateResource();
-		UE_LOG(LogTemp, Log, TEXT("DynamicTexture created successfully with size %d x %d."), Size, Size);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create DynamicTexture."));
 	}
 }
 void AFluidGrid::BeginPlay()
@@ -49,7 +44,6 @@ void AFluidGrid::BeginPlay()
 
 	if (!BaseMaterial)
 	{
-		UE_LOG(LogTemp, Error, TEXT("BaseMaterial is not assigned."));
 		return;
 	}
 
@@ -61,12 +55,16 @@ void AFluidGrid::BeginPlay()
 		DynamicMaterialInstance->SetTextureParameterValue(FName("DynamicTexture"), DynamicTexture);
 		PlaneComponent->SetMaterial(0, DynamicMaterialInstance);
 	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create dynamic material instance."));
-	}
 
-	GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AFluidGrid::StepSimulation, Dt, true);
+	//GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &AFluidGrid::StepSimulation, Dt, true);
+}
+
+void AFluidGrid::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	Dt = DeltaSeconds * 1000;
+	StepSimulation();
 }
 
 void AFluidGrid::UpdateTexture()
@@ -96,14 +94,15 @@ void AFluidGrid::UpdateTexture()
 	FMemory::Memcpy(Data, ColorData.GetData(), ColorData.Num() * sizeof(FColor));
 	Mip.BulkData.Unlock();
 	DynamicTexture->UpdateResource();
-	UE_LOG(LogTemp, Log, TEXT("DynamicTexture updated successfully."));
+	UE_LOG(LogTemp, Log, TEXT("Updated texture with new density values."));
 }
 
 void AFluidGrid::AddDensity(int32 x, int32 y, float amount)
 {
 	Density[IX(x, y)] += amount;
-}
+	UE_LOG(LogTemp, Log, TEXT("Added Density at (%d, %d) = %f"), x, y, Density[IX(x, y)]);
 
+}
 void AFluidGrid::AddVelocity(int32 x, int32 y, float amountX, float amountY)
 {
 	int32 index = IX(x, y);
@@ -116,31 +115,56 @@ void AFluidGrid::StepSimulation()
 	AddDensity(Size / 2, Size / 2, 100.0f);
 	AddVelocity(Size / 2, Size / 2, 1.0f, 0.0f);
 
+	UE_LOG(LogTemp, Log, TEXT("Added initial density and velocity."));
+
 	TArray<float> Vx0 = Vx;
 	TArray<float> Vy0 = Vy;
 	TArray<float> Density0 = Density;
 
+	// Log initial density at the center
+	UE_LOG(LogTemp, Log, TEXT("Initial Density at center = %f"), Density[IX(Size / 2, Size / 2)]);
+
 	Diffuse(1, Vx, Vx0, Viscosity, Dt);
 	Diffuse(2, Vy, Vy0, Viscosity, Dt);
+	UE_LOG(LogTemp, Log, TEXT("Diffused velocities."));
 
 	Project(Vx, Vy, Vx0, Vy0);
+	UE_LOG(LogTemp, Log, TEXT("Projected velocities."));
 
 	Advect(1, Vx, Vx0, Vx0, Vy0, Dt);
 	Advect(2, Vy, Vy0, Vx0, Vy0, Dt);
+	UE_LOG(LogTemp, Log, TEXT("Advected velocities."));
 
 	Project(Vx, Vy, Vx0, Vy0);
+	UE_LOG(LogTemp, Log, TEXT("Projected velocities again."));
 
 	Diffuse(0, Density, Density0, Diffusion, Dt);
 
+	// Log density after diffusion at the center
+	UE_LOG(LogTemp, Log, TEXT("Density after Diffusion at center = %f"), Density[IX(Size / 2, Size / 2)]);
+
 	Advect(0, Density, Density0, Vx, Vy, Dt);
 
+	// Log final density at the center
+	UE_LOG(LogTemp, Log, TEXT("Final Density at center = %f"), Density[IX(Size / 2, Size / 2)]);
+
+	UE_LOG(LogTemp, Log, TEXT("Advected density."));
+
 	UpdateTexture();
+	UE_LOG(LogTemp, Log, TEXT("Updated texture."));
 }
 
 void AFluidGrid::Diffuse(int32 b, TArray<float>& x, TArray<float>& x0, float diff, float dt)
 {
 	float a = dt * diff * (Size - 2) * (Size - 2);
+	UE_LOG(LogTemp, Log, TEXT("Diffuse: a = %f, diff = %f, dt = %f"), a, diff, dt);
 	LinearSolve(b, x, x0, a, 1 + 4 * a);
+
+	// Log density values after diffusion for the first few elements
+	for (int32 i = 0; i < FMath::Min(Size, 10); i++)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Diffuse: Density[%d] = %f"), i, x[i]);
+	}
 }
 
 void AFluidGrid::Advect(int32 b, TArray<float>& d, TArray<float>& d0, TArray<float>& velocX, TArray<float>& velocY, float dt)
@@ -219,7 +243,14 @@ void AFluidGrid::LinearSolve(int32 b, TArray<float>& x, TArray<float>& x0, float
 		}
 		SetBoundary(b, x);
 	}
+
+	// Log the results of LinearSolve for the first few elements
+	for (int32 i = 0; i < FMath::Min(Size, 10); i++)
+	{
+		UE_LOG(LogTemp, Log, TEXT("LinearSolve: x[%d] = %f"), i, x[i]);
+	}
 }
+
 void AFluidGrid::SetBoundary(int32 b, TArray<float>& x)
 {
 	for (int32 i = 1; i < Size - 1; i++)

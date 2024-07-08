@@ -21,6 +21,7 @@ protected:
 
 	//Schedules the simulation step to run periodically.
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	void UpdateTexture();
 private:
@@ -32,7 +33,7 @@ private:
 	float Dt = 0.1f;
 	//Diffusion rate of the fluid.
 	UPROPERTY(EditAnywhere)
-	float Diffusion = 0.1f;
+	float Diffusion = 1.0f;
 	//Viscosity of the fluid.
 	UPROPERTY(EditAnywhere)
 	float Viscosity = 0.1f;
