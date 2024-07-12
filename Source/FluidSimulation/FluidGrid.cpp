@@ -9,6 +9,9 @@
 #include "RenderGraphResources.h"
 #include "RenderCommandFence.h"
 #include "RenderingThread.h"
+#include "DrawDebugHelpers.h"
+#include "Components/BoxComponent.h"
+#include "Engine/StaticMesh.h"
 
 AFluidGrid::AFluidGrid()
 {
@@ -23,20 +26,23 @@ AFluidGrid::AFluidGrid()
 	PlaneComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PlaneComponent"));
 	RootComponent = PlaneComponent;
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMeshAsset(TEXT("/Game/Path/To/PlaneMesh"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMeshAsset(TEXT("/Game/StarterContent/Shapes/Shape_Plane.Shape_Plane"));
 	if (PlaneMeshAsset.Succeeded())
 	{
 		PlaneComponent->SetStaticMesh(PlaneMeshAsset.Object);
-		PlaneComponent->SetWorldScale3D(FVector(1.0f, 1.0f, 1.0f));
+		PlaneComponent->SetWorldScale3D(FVector(10.0f, 10.0f, 1.0f));
+		PlaneComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		PlaneComponent->SetCollisionResponseToAllChannels(ECR_Block);
 	}
+
+	RenderTarget = CreateDefaultSubobject<UTextureRenderTarget2D>(TEXT("RenderTarget"));
 }
 
 void AFluidGrid::InitializeRenderTarget()
 {
-	RenderTarget = NewObject<UTextureRenderTarget2D>();
 	RenderTarget->InitAutoFormat(Size, Size);
 	RenderTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
-	RenderTarget->AddToRoot();
+	RenderTarget->ClearColor = FLinearColor::Black;
 	RenderTarget->UpdateResource();
 }
 
@@ -44,19 +50,16 @@ void AFluidGrid::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (!BaseMaterial)
-	{
-		UE_LOG(LogTemp, Error, TEXT("BaseMaterial is not set."));
-		return;
-	}
-
 	InitializeRenderTarget();
 
-	DynamicMaterialInstance = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-	if (DynamicMaterialInstance)
+	if (BaseMaterial)
 	{
-		DynamicMaterialInstance->SetTextureParameterValue(FName("DynamicTexture"), RenderTarget);
-		PlaneComponent->SetMaterial(0, DynamicMaterialInstance);
+		DynamicMaterialInstance = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+		if (DynamicMaterialInstance)
+		{
+			DynamicMaterialInstance->SetTextureParameterValue(FName("DynamicTexture"), RenderTarget);
+			PlaneComponent->SetMaterial(0, DynamicMaterialInstance);
+		}
 	}
 }
 
@@ -64,39 +67,65 @@ void AFluidGrid::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	HandleInput();
 	StepSimulation();
 	UpdateRenderTarget();
-
-	HandleInput();
 }
 
 void AFluidGrid::HandleInput()
 {
 	if (GetWorld()->GetFirstPlayerController()->IsInputKeyDown(EKeys::LeftMouseButton))
 	{
-		FVector2D MousePosition;
-		GetWorld()->GetFirstPlayerController()->GetMousePosition(MousePosition.X, MousePosition.Y);
-
+		LineTraceAndColor();
+	}
+}
+void AFluidGrid::LineTraceAndColor()
+{
+	FVector2D MousePosition;
+	if (GetWorld()->GetFirstPlayerController()->GetMousePosition(MousePosition.X, MousePosition.Y))
+	{
 		FVector WorldPosition, WorldDirection;
-		GetWorld()->GetFirstPlayerController()->DeprojectScreenPositionToWorld(MousePosition.X, MousePosition.Y, WorldPosition, WorldDirection);
+		if (GetWorld()->GetFirstPlayerController()->DeprojectScreenPositionToWorld(MousePosition.X, MousePosition.Y, WorldPosition, WorldDirection))
+		{
+			FHitResult HitResult;
+			FCollisionQueryParams Params;
 
-		int32 GridX = FMath::Clamp(static_cast<int32>(WorldPosition.X), 0, Size - 1);
-		int32 GridY = FMath::Clamp(static_cast<int32>(WorldPosition.Y), 0, Size - 1);
+			FVector EndPosition = WorldPosition + WorldDirection * 10000.0f;
+			bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, WorldPosition, EndPosition, ECC_Visibility, Params);
 
-		AddDensity(GridX, GridY, 100.0f);
+			if (bHit && HitResult.Component == PlaneComponent)
+			{
+				FVector LocalHit = PlaneComponent->GetComponentTransform().InverseTransformPosition(HitResult.Location);
+				FVector2D GridPosition;
+				GridPosition.X = (LocalHit.X + (PlaneComponent->GetStaticMesh()->GetBounds().BoxExtent.X)) / (PlaneComponent->GetStaticMesh()->GetBounds().BoxExtent.X * 2.0f) * Size;
+				GridPosition.Y = (LocalHit.Y + (PlaneComponent->GetStaticMesh()->GetBounds().BoxExtent.Y)) / (PlaneComponent->GetStaticMesh()->GetBounds().BoxExtent.Y * 2.0f) * Size;
+
+				int32 ClampedGridX = FMath::Clamp(static_cast<int32>(GridPosition.X), 1, Size - 2);
+				int32 ClampedGridY = FMath::Clamp(static_cast<int32>(GridPosition.Y), 1, Size - 2);
+
+				// Adjust the area affected by the hit point
+				for (int32 offsetX = 0; offsetX <= 0; ++offsetX)
+				{
+					for (int32 offsetY = 0; offsetY <= 0; ++offsetY)
+					{
+						int32 x = FMath::Clamp(ClampedGridX + offsetX, 1, Size - 2);
+						int32 y = FMath::Clamp(ClampedGridY + offsetY, 1, Size - 2);
+						AddDensity(x, y, 10.0f);
+						AddVelocity(x, y, 1.0f, 1.0f); // Example velocities
+					}
+				}
+
+				StepSimulation();
+				UpdateRenderTarget();
+			}
+		}
 	}
 }
 
 void AFluidGrid::UpdateRenderTarget()
 {
-	if (!RenderTarget)
-	{
-		UE_LOG(LogTemp, Error, TEXT("RenderTarget is not initialized."));
-		return;
-	}
-
 	FTextureRenderTargetResource* RenderTargetResource = RenderTarget->GameThread_GetRenderTargetResource();
-	TArray<FLinearColor> ColorData;
+	TArray<FColor> ColorData;
 	ColorData.SetNum(Size * Size);
 
 	for (int32 y = 0; y < Size; y++)
@@ -106,11 +135,8 @@ void AFluidGrid::UpdateRenderTarget()
 			float Value = Density[IX(x, y)];
 			float Intensity = FMath::Clamp(Value, 0.0f, 1.0f);
 
-			FLinearColor Color;
-			Color.R = Intensity;
-			Color.G = 0.0f;
-			Color.B = 1.0f - Intensity;
-			Color.A = 1.0f;
+			// Use the green gradient color function
+			FColor Color = GetGradientColor(Intensity);
 
 			ColorData[IX(x, y)] = Color;
 		}
@@ -121,81 +147,96 @@ void AFluidGrid::UpdateRenderTarget()
 		[RenderTargetResource, ColorData, LocalSize](FRHICommandListImmediate& RHICmdList)
 		{
 			FUpdateTextureRegion2D UpdateRegion(0, 0, 0, 0, LocalSize, LocalSize);
-			int32 Pitch = LocalSize * sizeof(FLinearColor);
+			int32 Pitch = LocalSize * sizeof(FColor);
 			RHICmdList.UpdateTexture2D(
 				RenderTargetResource->GetRenderTargetTexture(), 0, UpdateRegion, Pitch, (uint8*)ColorData.GetData()
 			);
 		}
 		);
-
-	UE_LOG(LogTemp, Log, TEXT("Updated render target with new density values."));
 }
+
+FColor AFluidGrid::GetGradientColor(float Intensity)
+{
+	Intensity = FMath::Clamp(Intensity, 0.0f, 1.0f);
+
+	// Define the green gradient colors (example: light green to dark green)
+	FVector StartColor(0, 255, 128);  // Light green
+	FVector MidColor(0, 204, 102);    // Medium green
+	FVector EndColor(0, 153, 76);     // Dark green
+
+	FVector Color;
+
+	if (Intensity < 0.5f)
+	{
+		Color = FMath::Lerp(StartColor, MidColor, Intensity * 2.0f);
+	}
+	else
+	{
+		Color = FMath::Lerp(MidColor, EndColor, (Intensity - 0.5f) * 2.0f);
+	}
+
+	return FColor(Color.X, Color.Y, Color.Z, 255);
+}
+
+
 
 void AFluidGrid::AddDensity(int32 x, int32 y, float amount)
 {
-	Density[IX(x, y)] += amount;
-	UE_LOG(LogTemp, Log, TEXT("Added Density at (%d, %d) = %f"), x, y, Density[IX(x, y)]);
+	int32 Index = IX(x, y);
+	Density[Index] += amount;
 }
 
 void AFluidGrid::AddVelocity(int32 x, int32 y, float amountX, float amountY)
 {
-	int32 index = IX(x, y);
-	Vx[index] += amountX;
-	Vy[index] += amountY;
+	int32 Index = IX(x, y);
+	Vx[Index] += amountX;
+	Vy[Index] += amountY;
 }
 
 void AFluidGrid::StepSimulation()
 {
-	UE_LOG(LogTemp, Log, TEXT("Starting StepSimulation"));
-
-	AddDensity(Size / 2, Size / 2, 100.0f);
-	AddVelocity(Size / 2, Size / 2, 1.0f, 0.0f);
-
-	UE_LOG(LogTemp, Log, TEXT("Added initial density and velocity."));
-
 	TArray<float> Vx0 = Vx;
 	TArray<float> Vy0 = Vy;
 	TArray<float> Density0 = Density;
 
-	UE_LOG(LogTemp, Log, TEXT("Initial Density at center = %f"), Density[IX(Size / 2, Size / 2)]);
+	// Adjusted parameters for improved fluid behavior
+	float AdjustedViscosity = Viscosity * 2.0f;
+	float AdjustedDiffusion = Diffusion * 2.0f;
+	float AdjustedDt = Dt * 2.0f;
 
-	Diffuse(1, Vx, Vx0, Viscosity, Dt);
-	Diffuse(2, Vy, Vy0, Viscosity, Dt);
-	UE_LOG(LogTemp, Log, TEXT("Diffused velocities."));
+	// Diffuse velocities
+	Diffuse(1, Vx, Vx0, AdjustedViscosity, AdjustedDt);
+	Diffuse(2, Vy, Vy0, AdjustedViscosity, AdjustedDt);
 
+	// Project velocities
 	Project(Vx, Vy, Vx0, Vy0);
-	UE_LOG(LogTemp, Log, TEXT("Projected velocities."));
 
-	Advect(1, Vx, Vx0, Vx0, Vy0, Dt);
-	Advect(2, Vy, Vy0, Vx0, Vy0, Dt);
-	UE_LOG(LogTemp, Log, TEXT("Advected velocities."));
+	// Advect velocities
+	Advect(1, Vx, Vx0, Vx0, Vy0, AdjustedDt);
+	Advect(2, Vy, Vy0, Vx0, Vy0, AdjustedDt);
 
+	// Project velocities again
 	Project(Vx, Vy, Vx0, Vy0);
-	UE_LOG(LogTemp, Log, TEXT("Projected velocities again."));
 
-	Diffuse(0, Density, Density0, Diffusion, Dt);
-	UE_LOG(LogTemp, Log, TEXT("Density after Diffusion at center = %f"), Density[IX(Size / 2, Size / 2)]);
+	// Diffuse densities
+	Diffuse(0, Density, Density0, AdjustedDiffusion, AdjustedDt);
 
-	Advect(0, Density, Density0, Vx, Vy, Dt);
-	UE_LOG(LogTemp, Log, TEXT("Final Density at center = %f"), Density[IX(Size / 2, Size / 2)]);
+	// Advect densities
+	Advect(0, Density, Density0, Vx, Vy, AdjustedDt);
 
-	UE_LOG(LogTemp, Log, TEXT("Advected density."));
-
-	UpdateRenderTarget();
-	UE_LOG(LogTemp, Log, TEXT("Updated render target."));
+	// Apply boundary conditions
+	SetBoundary(0, Density);
+	SetBoundary(1, Vx);
+	SetBoundary(2, Vy);
 }
+
 
 void AFluidGrid::Diffuse(int32 b, TArray<float>& x, TArray<float>& x0, float diff, float dt)
 {
 	float a = dt * diff * (Size - 2) * (Size - 2);
-	UE_LOG(LogTemp, Log, TEXT("Diffuse: a = %f, diff = %f, dt = %f"), a, diff, dt);
 	LinearSolve(b, x, x0, a, 1 + 4 * a);
-
-	for (int32 i = 0; i < FMath::Min(Size, 10); i++)
-	{
-		UE_LOG(LogTemp, Log, TEXT("Diffuse: Density[%d] = %f"), i, x[i]);
-	}
 }
+
 
 void AFluidGrid::Advect(int32 b, TArray<float>& d, TArray<float>& d0, TArray<float>& velocX, TArray<float>& velocY, float dt)
 {
@@ -231,6 +272,7 @@ void AFluidGrid::Advect(int32 b, TArray<float>& d, TArray<float>& d0, TArray<flo
 	SetBoundary(b, d);
 }
 
+
 void AFluidGrid::Project(TArray<float>& velocX, TArray<float>& velocY, TArray<float>& p, TArray<float>& div)
 {
 	for (int32 j = 1; j < Size - 1; j++)
@@ -262,7 +304,7 @@ void AFluidGrid::Project(TArray<float>& velocX, TArray<float>& velocY, TArray<fl
 void AFluidGrid::LinearSolve(int32 b, TArray<float>& x, TArray<float>& x0, float a, float c)
 {
 	float cRecip = 1.0f / c;
-	for (int32 t = 0; t < Size; t++)
+	for (int32 t = 0; t < 20; t++)
 	{
 		for (int32 j = 1; j < Size - 1; j++)
 		{
@@ -272,11 +314,6 @@ void AFluidGrid::LinearSolve(int32 b, TArray<float>& x, TArray<float>& x0, float
 			}
 		}
 		SetBoundary(b, x);
-	}
-
-	for (int32 i = 0; i < FMath::Min(Size, 10); i++)
-	{
-		UE_LOG(LogTemp, Log, TEXT("LinearSolve: x[%d] = %f"), i, x[i]);
 	}
 }
 
@@ -290,11 +327,19 @@ void AFluidGrid::SetBoundary(int32 b, TArray<float>& x)
 	for (int32 j = 1; j < Size - 1; j++)
 	{
 		x[IX(0, j)] = b == 1 ? -x[IX(1, j)] : x[IX(1, j)];
-		x[IX(Size - 1, j)] = b == 1 ? -x[IX(1, j)] : x[IX(Size - 2, j)];
+		x[IX(Size - 1, j)] = b == 1 ? -x[IX(Size - 2, j)] : x[IX(Size - 2, j)];
 	}
 
 	x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
 	x[IX(0, Size - 1)] = 0.5f * (x[IX(1, Size - 1)] + x[IX(0, Size - 2)]);
 	x[IX(Size - 1, 0)] = 0.5f * (x[IX(Size - 2, 0)] + x[IX(Size - 1, 1)]);
 	x[IX(Size - 1, Size - 1)] = 0.5f * (x[IX(Size - 2, Size - 1)] + x[IX(Size - 1, Size - 2)]);
+}
+
+int32 AFluidGrid::IX(int32 x, int32 y) const
+{
+	x = FMath::Clamp(x, 0, Size - 1);
+	y = FMath::Clamp(y, 0, Size - 1);
+
+	return x + (y * Size);
 }
