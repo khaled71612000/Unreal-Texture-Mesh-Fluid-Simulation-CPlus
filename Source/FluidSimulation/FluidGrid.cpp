@@ -48,6 +48,7 @@ void AFluidGrid::InitializeRenderTarget()
 	RenderTarget->UpdateResource();
 }
 
+
 void AFluidGrid::BeginPlay()
 {
 	Super::BeginPlay();
@@ -63,6 +64,9 @@ void AFluidGrid::BeginPlay()
 			PlaneComponent->SetMaterial(0, DynamicMaterialInstance);
 		}
 	}
+
+	// Ensure the plane does not cast shadows
+	PlaneComponent->SetCastShadow(false);
 }
 
 void AFluidGrid::Tick(float DeltaSeconds)
@@ -132,19 +136,64 @@ void AFluidGrid::RenderDensity()
 		}
 	}
 
+	// Use bilinear interpolation for smoothing
+	TArray<FColor> SmoothedColorData;
+	SmoothedColorData.SetNum(Size * Size);
+
+	for (int32 y = 0; y < Size; y++)
+	{
+		for (int32 x = 0; x < Size; x++)
+		{
+			// Get the surrounding pixel values
+			FColor c00 = ColorData[IX(x, y)];
+			FColor c10 = (x + 1 < Size) ? ColorData[IX(x + 1, y)] : c00;
+			FColor c01 = (y + 1 < Size) ? ColorData[IX(x, y + 1)] : c00;
+			FColor c11 = (x + 1 < Size && y + 1 < Size) ? ColorData[IX(x + 1, y + 1)] : c00;
+
+			// Bilinear interpolation
+			float fx = (float)x / (Size - 1);
+			float fy = (float)y / (Size - 1);
+
+			// Interpolate colors
+			FColor interpolatedColorX0 = FColor(
+				FMath::Lerp(c00.R, c10.R, fx),
+				FMath::Lerp(c00.G, c10.G, fx),
+				FMath::Lerp(c00.B, c10.B, fx),
+				FMath::Lerp(c00.A, c10.A, fx)
+			);
+
+			FColor interpolatedColorX1 = FColor(
+				FMath::Lerp(c01.R, c11.R, fx),
+				FMath::Lerp(c01.G, c11.G, fx),
+				FMath::Lerp(c01.B, c11.B, fx),
+				FMath::Lerp(c01.A, c11.A, fx)
+			);
+
+			FColor interpolatedColor = FColor(
+				FMath::Lerp(interpolatedColorX0.R, interpolatedColorX1.R, fy),
+				FMath::Lerp(interpolatedColorX0.G, interpolatedColorX1.G, fy),
+				FMath::Lerp(interpolatedColorX0.B, interpolatedColorX1.B, fy),
+				FMath::Lerp(interpolatedColorX0.A, interpolatedColorX1.A, fy)
+			);
+
+			SmoothedColorData[IX(x, y)] = interpolatedColor;
+		}
+	}
+
 	FTextureRenderTargetResource* RenderTargetResource = RenderTarget->GameThread_GetRenderTargetResource();
 	int32 LocalSize = Size;
 	ENQUEUE_RENDER_COMMAND(UpdateRenderTarget)(
-		[RenderTargetResource, ColorData, LocalSize](FRHICommandListImmediate& RHICmdList)
+		[RenderTargetResource, SmoothedColorData, LocalSize](FRHICommandListImmediate& RHICmdList)
 		{
 			FUpdateTextureRegion2D UpdateRegion(0, 0, 0, 0, LocalSize, LocalSize);
 			int32 Pitch = LocalSize * sizeof(FColor);
 			RHICmdList.UpdateTexture2D(
-				RenderTargetResource->GetRenderTargetTexture(), 0, UpdateRegion, Pitch, (uint8*)ColorData.GetData()
+				RenderTargetResource->GetRenderTargetTexture(), 0, UpdateRegion, Pitch, (uint8*)SmoothedColorData.GetData()
 			);
 		}
 		);
 }
+
 
 void AFluidGrid::RenderVelocity()
 {
@@ -262,44 +311,58 @@ FColor AFluidGrid::GetSmoothGradientColor(float Intensity)
 {
 	Intensity = FMath::Clamp(Intensity, 0.0f, 1.0f);
 
-	FVector4 Color1(0, 0, 255, 255); // Blue
-	FVector4 Color2(0, 128, 255, 255); // Light Blue
-	FVector4 Color3(0, 255, 128, 255); // Light Green
-	FVector4 Color4(128, 255, 0, 255); // Yellow-Green
-	FVector4 Color5(255, 128, 0, 255); // Orange
-	FVector4 Color6(255, 0, 0, 255); // Red
-	FVector4 Color7(255, 0, 255, 255); // Purple
-	FVector4 Color8(128, 0, 255, 255); // Dark Purple
+	FVector4 Color1(75, 0, 130, 255);    // Indigo
+	FVector4 Color2(138, 43, 226, 255);  // Blue Violet
+	FVector4 Color3(75, 0, 130, 255);    // Indigo
+	FVector4 Color4(148, 0, 211, 255);   // Dark Violet
+	FVector4 Color5(255, 0, 255, 255);   // Magenta
+	FVector4 Color6(0, 255, 255, 255);   // Cyan
+	FVector4 Color7(0, 128, 128, 255);   // Teal
+	FVector4 Color8(0, 255, 127, 255);   // Spring Green
+	FVector4 Color9(255, 215, 0, 255);   // Gold
+	FVector4 Color10(255, 69, 0, 255);   // Red-Orange
 
 	FVector4 Color;
 
-	if (Intensity < 0.125f)
+	if (Intensity < 0.1f)
 	{
-		Color = FMath::Lerp(Color1, Color2, Intensity * 8.0f);
+		Color = FMath::Lerp(Color1, Color2, Intensity * 10.0f);
 	}
-	else if (Intensity < 0.25f)
+	else if (Intensity < 0.2f)
 	{
-		Color = FMath::Lerp(Color2, Color3, (Intensity - 0.125f) * 8.0f);
+		Color = FMath::Lerp(Color2, Color3, (Intensity - 0.1f) * 10.0f);
 	}
-	else if (Intensity < 0.375f)
+	else if (Intensity < 0.3f)
 	{
-		Color = FMath::Lerp(Color3, Color4, (Intensity - 0.25f) * 8.0f);
+		Color = FMath::Lerp(Color3, Color4, (Intensity - 0.2f) * 10.0f);
+	}
+	else if (Intensity < 0.4f)
+	{
+		Color = FMath::Lerp(Color4, Color5, (Intensity - 0.3f) * 10.0f);
 	}
 	else if (Intensity < 0.5f)
 	{
-		Color = FMath::Lerp(Color4, Color5, (Intensity - 0.375f) * 8.0f);
+		Color = FMath::Lerp(Color5, Color6, (Intensity - 0.4f) * 10.0f);
 	}
-	else if (Intensity < 0.625f)
+	else if (Intensity < 0.6f)
 	{
-		Color = FMath::Lerp(Color5, Color6, (Intensity - 0.5f) * 8.0f);
+		Color = FMath::Lerp(Color6, Color7, (Intensity - 0.5f) * 10.0f);
 	}
-	else if (Intensity < 0.75f)
+	else if (Intensity < 0.7f)
 	{
-		Color = FMath::Lerp(Color6, Color7, (Intensity - 0.625f) * 8.0f);
+		Color = FMath::Lerp(Color7, Color8, (Intensity - 0.6f) * 10.0f);
+	}
+	else if (Intensity < 0.8f)
+	{
+		Color = FMath::Lerp(Color8, Color9, (Intensity - 0.7f) * 10.0f);
+	}
+	else if (Intensity < 0.9f)
+	{
+		Color = FMath::Lerp(Color9, Color10, (Intensity - 0.8f) * 10.0f);
 	}
 	else
 	{
-		Color = FMath::Lerp(Color7, Color8, (Intensity - 0.75f) * 8.0f);
+		Color = FMath::Lerp(Color10, Color1, (Intensity - 0.9f) * 10.0f);
 	}
 
 	return FColor(Color.X, Color.Y, Color.Z, Color.W);
