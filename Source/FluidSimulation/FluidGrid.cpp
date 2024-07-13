@@ -74,11 +74,15 @@ void AFluidGrid::Tick(float DeltaSeconds)
 	int32 cx = Size / 2;
 	int32 cy = Size / 2;
 
-	for (int32 i = -AreaSize; i <= AreaSize; i++)
+	// Add multiple affected areas
+	for (int32 offset = -Size / 4; offset <= Size / 4; offset += Size / 4)
 	{
-		for (int32 j = -AreaSize; j <= AreaSize; j++)
+		for (int32 i = -AreaSize; i <= AreaSize; i++)
 		{
-			AddDensity(cx + i, cy + j, AffectedDensity);
+			for (int32 j = -AreaSize; j <= AreaSize; j++)
+			{
+				AddDensity(cx + i + offset, cy + j + offset, AffectedDensity);
+			}
 		}
 	}
 
@@ -144,35 +148,35 @@ void AFluidGrid::RenderDensity()
 
 void AFluidGrid::RenderVelocity()
 {
-	const float SCALE = 10.0f;
+	//const float SCALE = 10.0f; // Adjusted for a larger visual effect
 
-	for (int32 y = 0; y < Size; y++)
-	{
-		for (int32 x = 0; x < Size; x++)
-		{
-			float vx = Vx[IX(x, y)];
-			float vy = Vy[IX(x, y)];
+	//for (int32 y = 0; y < Size; y++)
+	//{
+	//	for (int32 x = 0; x < Size; x++)
+	//	{
+	//		float vx = Vx[IX(x, y)];
+	//		float vy = Vy[IX(x, y)];
 
-			if (!(FMath::Abs(vx) < 0.1f && FMath::Abs(vy) <= 0.1f))
-			{
-				DrawDebugLine(
-					GetWorld(),
-					FVector(x * SCALE, y * SCALE, 0),
-					FVector((x + vx) * SCALE, (y + vy) * SCALE, 0),
-					FColor::White,
-					false, -1, 0,
-					1.0f
-				);
-			}
-		}
-	}
+	//		if (!(FMath::Abs(vx) < 0.1f && FMath::Abs(vy) <= 0.1f))
+	//		{
+	//			DrawDebugLine(
+	//				GetWorld(),
+	//				FVector(x * SCALE, y * SCALE, 0),
+	//				FVector((x + vx) * SCALE, (y + vy) * SCALE, 0),
+	//				FColor::White,
+	//				false, -1, 0,
+	//				1.0f
+	//			);
+	//		}
+	//	}
+	//}
 }
 
 void AFluidGrid::FadeDensity()
 {
 	for (int32 i = 0; i < Density.Num(); i++)
 	{
-		Density[i] = FMath::Clamp(Density[i] - 0.1f, 0.0f, 255.0f);
+		Density[i] = FMath::Clamp(Density[i] - 0.5f, 0.0f, 255.0f); // Increased fade rate for more dynamic simulation
 	}
 }
 
@@ -200,7 +204,7 @@ void AFluidGrid::LineTraceAndColor()
 				int32 ClampedGridX = FMath::Clamp(static_cast<int32>(GridPosition.X), 1, Size - 2);
 				int32 ClampedGridY = FMath::Clamp(static_cast<int32>(GridPosition.Y), 1, Size - 2);
 
-				int32 Radius = 2;
+				int32 Radius = 4; // Increased radius for larger effect area
 				for (int32 i = -Radius; i <= Radius; i++)
 				{
 					for (int32 j = -Radius; j <= Radius; j++)
@@ -209,8 +213,8 @@ void AFluidGrid::LineTraceAndColor()
 						int32 Y = ClampedGridY + j;
 						if (X >= 1 && X < Size - 1 && Y >= 1 && Y < Size - 1)
 						{
-							AddDensity(X, Y, AffectedDensity * 20.0f);
-							AddVelocity(X, Y, AffectedVelocity * FMath::FRandRange(10.0f, 20.0f), AffectedVelocity * FMath::FRandRange(10.0f, 20.0f));
+							AddDensity(X, Y, AffectedDensity * 50.0f); // Increased density effect
+							AddVelocity(X, Y, AffectedVelocity * FMath::FRandRange(10.0f, 20.0f), AffectedVelocity * FMath::FRandRange(10.0f, 20.0f)); // Increased velocity with high randomness
 						}
 					}
 				}
@@ -258,34 +262,44 @@ FColor AFluidGrid::GetSmoothGradientColor(float Intensity)
 {
 	Intensity = FMath::Clamp(Intensity, 0.0f, 1.0f);
 
-	FVector4 Color1(0, 0, 255, 255);
-	FVector4 Color2(0, 128, 255, 255);
-	FVector4 Color3(0, 255, 128, 255);
-	FVector4 Color4(128, 255, 0, 255);
-	FVector4 Color5(255, 128, 0, 255);
-	FVector4 Color6(255, 0, 0, 255);
+	FVector4 Color1(0, 0, 255, 255); // Blue
+	FVector4 Color2(0, 128, 255, 255); // Light Blue
+	FVector4 Color3(0, 255, 128, 255); // Light Green
+	FVector4 Color4(128, 255, 0, 255); // Yellow-Green
+	FVector4 Color5(255, 128, 0, 255); // Orange
+	FVector4 Color6(255, 0, 0, 255); // Red
+	FVector4 Color7(255, 0, 255, 255); // Purple
+	FVector4 Color8(128, 0, 255, 255); // Dark Purple
 
 	FVector4 Color;
 
-	if (Intensity < 0.2f)
+	if (Intensity < 0.125f)
 	{
-		Color = FMath::Lerp(Color1, Color2, Intensity * 5.0f);
+		Color = FMath::Lerp(Color1, Color2, Intensity * 8.0f);
 	}
-	else if (Intensity < 0.4f)
+	else if (Intensity < 0.25f)
 	{
-		Color = FMath::Lerp(Color2, Color3, (Intensity - 0.2f) * 5.0f);
+		Color = FMath::Lerp(Color2, Color3, (Intensity - 0.125f) * 8.0f);
 	}
-	else if (Intensity < 0.6f)
+	else if (Intensity < 0.375f)
 	{
-		Color = FMath::Lerp(Color3, Color4, (Intensity - 0.4f) * 5.0f);
+		Color = FMath::Lerp(Color3, Color4, (Intensity - 0.25f) * 8.0f);
 	}
-	else if (Intensity < 0.8f)
+	else if (Intensity < 0.5f)
 	{
-		Color = FMath::Lerp(Color4, Color5, (Intensity - 0.6f) * 5.0f);
+		Color = FMath::Lerp(Color4, Color5, (Intensity - 0.375f) * 8.0f);
+	}
+	else if (Intensity < 0.625f)
+	{
+		Color = FMath::Lerp(Color5, Color6, (Intensity - 0.5f) * 8.0f);
+	}
+	else if (Intensity < 0.75f)
+	{
+		Color = FMath::Lerp(Color6, Color7, (Intensity - 0.625f) * 8.0f);
 	}
 	else
 	{
-		Color = FMath::Lerp(Color5, Color6, (Intensity - 0.8f) * 5.0f);
+		Color = FMath::Lerp(Color7, Color8, (Intensity - 0.75f) * 8.0f);
 	}
 
 	return FColor(Color.X, Color.Y, Color.Z, Color.W);

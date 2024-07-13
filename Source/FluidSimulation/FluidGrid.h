@@ -21,31 +21,31 @@ protected:
 
 private:
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	int32 Size = 256;
+	int32 Size = 256; // Reduced size for better performance
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	int32 AreaSize = 75;
+	int32 AreaSize = 100; // Larger affected area
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float AffectedDensity = 1.0f;
+	float AffectedDensity = 10.0f; // Increased density for more vibrant effect
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float AffectedVelocity = 31.0f;
+	float AffectedVelocity = 100.0f; // Increased velocity for more chaotic movement
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float Dt = 10.1f;
+	float Dt = 0.1f; // Adjusted time step for more stable simulation
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float Diffusion = 1;
+	float Diffusion = 0.0001f; // Adjusted diffusion for better fluid behavior
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float Viscosity = 1;
+	float Viscosity = 0.0001f; // Adjusted viscosity for smoother fluid
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float TurbulenceScale = 5;
+	float TurbulenceScale = 15.0f; // Adjusted turbulence scale
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float TurbulenceSpeed = 1;
+	float TurbulenceSpeed = 5.0f; // Adjusted turbulence speed
 
 	TArray<float> Density, Vx, Vy, Vz;
 
@@ -65,7 +65,7 @@ private:
 	UMaterial* BaseMaterial;
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float Scale = 150;
+	float Scale = 10.0f; // Adjusted for a larger visual effect
 
 	void InitializeRenderTarget();
 	void UpdateRenderTarget();

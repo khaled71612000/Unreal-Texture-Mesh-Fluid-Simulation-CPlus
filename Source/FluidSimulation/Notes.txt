@@ -1,0 +1,136 @@
+# Fluid Simulation Notes
+
+## Overview
+
+The `AFluidGrid` class implements a 2D fluid simulation using a grid-based approach. It initializes properties such as density, velocity, and diffusion, and updates the simulation at each tick. The simulation's visual representation is rendered onto a `UTextureRenderTarget2D` and displayed on a plane mesh.
+
+The key components of the simulation include:
+- Initialization of properties
+- Handling input to manipulate the simulation
+- Simulation steps to update fluid properties
+- Rendering the updated properties
+
+## Properties
+
+### Size
+- **Type**: `int32`
+- **Description**: The resolution of the simulation grid. Higher values increase detail but reduce performance since we are using the cpu to run this code.
+- **Default**: 256
+
+### AreaSize
+- **Type**: `int32`
+- **Description**: The size of the area affected by the simulation. Larger values increase the simulation's affected region.
+- **Default**: 100
+
+### AffectedDensity
+- **Type**: `float`
+- **Description**: The density added to the grid when affected. Higher values create more vibrant effects.
+- **Default**: 10.0
+
+### AffectedVelocity
+- **Type**: `float`
+- **Description**: The velocity added to the grid when affected. Higher values create more chaotic movements.
+- **Default**: 100.0
+
+### Dt
+- **Type**: `float`
+- **Description**: The time step for the simulation. Smaller values increase stability but slow down the simulation.
+- **Default**: 0.1
+
+### Diffusion
+- **Type**: `float`
+- **Description**: The diffusion rate of the fluid. Higher values make the fluid spread out faster.
+- **Default**: 0.0001
+
+### Viscosity
+- **Type**: `float`
+- **Description**: The viscosity of the fluid. Higher values make the fluid appear thicker and move slower.
+- **Default**: 0.0001
+
+### TurbulenceScale
+- **Type**: `float`
+- **Description**: The scale of the turbulence effect. Higher values increase the size of the turbulence patterns.
+- **Default**: 15.0
+
+### TurbulenceSpeed
+- **Type**: `float`
+- **Description**: The speed of the turbulence effect. Higher values make the turbulence change faster.
+- **Default**: 5.0
+
+### HandleInput
+- **Description**: Handles user input to manipulate the simulation.
+
+### RenderDensity
+- **Description**: Renders the density field onto the render target.
+
+### RenderVelocity
+- **Description**: Renders the velocity field (currently commented out).
+
+### FadeDensity
+- **Description**: Gradually fades the density field over time.
+
+### LineTraceAndColor
+- **Description**: Performs a line trace to detect mouse clicks and updates the simulation accordingly.
+
+### UpdateRenderTarget
+- **Description**: Updates the render target with the current simulation data.
+
+### GetSmoothGradientColor
+- **Description**: Returns a color based on the intensity of the fluid properties.
+
+### AddDensity
+- **Description**: Adds density to a specific grid cell.
+
+### AddVelocity
+- **Description**: Adds velocity to a specific grid cell.
+
+### StepSimulation
+- **Description**: Performs a single step of the fluid simulation, updating density and velocity fields.
+
+### AddRandomCentralVelocity
+- **Description**: Adds a random velocity to the center of the grid.
+
+### Diffuse
+- **Description**: Diffuses the fluid properties.
+
+### Advect
+- **Description**: Advects the fluid properties based on velocity.
+
+### Project
+- **Description**: Projects the velocity field to ensure incompressibility.
+
+### LinearSolve
+- **Description**: Solves linear systems for diffusion and projection steps.
+
+### SetBoundary
+- **Description**: Sets the boundary conditions for the fluid properties.
+
+### IX
+- **Description**: Converts 2D grid coordinates to a 1D array index.
+
+## Math Behind Simulation
+
+The fluid simulation is based on solving the Navier-Stokes equations, which describe the motion of fluid substances. The main steps involve:
+
+1. **Advection**: Moving fluid properties (density, velocity) along the velocity field.
+2. **Diffusion**: Spreading out the fluid properties over time.
+3. **Projection**: Adjusting the velocity field to ensure incompressibility.
+
+These steps are iteratively solved using methods like linear solvers and boundary conditions.
+
+## Modifications
+
+### Size
+- **Effect**: Increasing the size will result in higher resolution but lower performance. Decreasing the size will improve performance but reduce visual fidelity.
+
+### Dt
+- **Effect**: Increasing the time step may cause instability in the simulation. Decreasing the time step will make the simulation more stable but slower.
+
+### Diffusion
+- **Effect**: Increasing the diffusion rate will make the fluid spread out faster. Decreasing the diffusion rate will make the fluid retain its shape longer.
+
+### Viscosity
+- **Effect**: Increasing the viscosity will make the fluid appear thicker and move slower. Decreasing the viscosity will make the fluid appear thinner and move faster.
+
+### TurbulenceScale and TurbulenceSpeed
+- **Effect**: Adjusting these values will change the behavior of the turbulence effect in the simulation.
