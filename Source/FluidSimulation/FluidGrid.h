@@ -23,27 +23,33 @@ protected:
 	void LineTraceAndColor();
 
 private:
-	UPROPERTY(EditAnywhere)
-	int32 Size = 128;
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	int32 Size = 256;
+
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	int32 AreaSize = 60;  // Adjust this value to make the affected area bigger
+	int32 AreaSize = 75; // Smaller affected area
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float AffectedDensity = 10;  // Amount of density to add
+	float AffectedDensity = 1.0f;  // Reduced density value
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float AffectedVelocity = 2;  // Amount of velocity to add
+	float AffectedVelocity = 31.0f;  // Reduced velocity for smoother effect
 
-	UPROPERTY(EditAnywhere)
-	float Dt = 100.f;
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	float Dt = 10.1f;
 
-	UPROPERTY(EditAnywhere)
-	float Diffusion = 100.0f;
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	float Diffusion = 1;
 
-	UPROPERTY(EditAnywhere)
-	float Viscosity = 10.f;
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	float Viscosity = 1;
 
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	float TurbulenceScale = 5;
+
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	float TurbulenceSpeed = 1;
 	TArray<float> Density, Vx, Vy, Vz;
 
 	UPROPERTY(VisibleAnywhere)
@@ -61,13 +67,15 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
 	UMaterial* BaseMaterial;
 
-	UPROPERTY(EditAnywhere)
-	float Scale = 100.0f;  // Adjust this scale factor as needed
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	float Scale = 150;  // Adjust this scale factor as needed
+
 
 	void InitializeRenderTarget();
 	void UpdateRenderTarget();
 
-	FColor GetGradientColor(float Intensity);
+	FColor GetSmoothGradientColor(float Intensity);
+
 	void AddDensity(int32 x, int32 y, float amount);
 	void AddVelocity(int32 x, int32 y, float amountX, float amountY);
 	void Diffuse(int32 b, TArray<float>& x, TArray<float>& x0, float diff, float dt);

@@ -31,6 +31,7 @@ AFluidGrid::AFluidGrid()
 	{
 		PlaneComponent->SetStaticMesh(PlaneMeshAsset.Object);
 		PlaneComponent->SetWorldScale3D(FVector(4, 4, 4));
+		PlaneComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 0.0f));  // Ensure it is centered
 		PlaneComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		PlaneComponent->SetCollisionResponseToAllChannels(ECR_Block);
 	}
@@ -39,14 +40,13 @@ AFluidGrid::AFluidGrid()
 }
 
 
-
 void AFluidGrid::InitializeRenderTarget()
 {
-	RenderTarget->InitAutoFormat(Size, Size);
+	RenderTarget->InitAutoFormat(Size, Size);  // Ensure resolution matches the grid size
 	RenderTarget->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
 	RenderTarget->bForceLinearGamma = true;       // Ensure linear gamma for better color precision
 	RenderTarget->bAutoGenerateMips = true;       // Enable mipmap generation
-	RenderTarget->bNeedsTwoCopies = false;        // Use compressed format
+	RenderTarget->ClearColor = FLinearColor::Black; // Clear to black for a smooth background
 	RenderTarget->UpdateResource();
 }
 
@@ -66,22 +66,22 @@ void AFluidGrid::BeginPlay()
 		}
 	}
 }
-
 void AFluidGrid::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
 	HandleInput();
 
+	// Adjust the density addition to avoid the red square
 	int32 cx = Size / 2;
 	int32 cy = Size / 2;
 
-	// Add density in a larger area
+	// Add density in a smaller area
 	for (int32 i = -AreaSize; i <= AreaSize; i++)
 	{
 		for (int32 j = -AreaSize; j <= AreaSize; j++)
 		{
-			AddDensity(cx + i, cy + j, FMath::FRandRange(AffectedDensity / 2, AffectedDensity));
+			AddDensity(cx + i, cy + j, AffectedDensity);
 		}
 	}
 
@@ -91,13 +91,14 @@ void AFluidGrid::Tick(float DeltaSeconds)
 	{
 		for (int32 j = -Size / 2; j <= Size / 2; j++)
 		{
-			float noiseValueX = FMath::PerlinNoise2D(FVector2D((i + cx) * 0.1f, (j + cy) * 0.1f) + FVector2D(time * 0.1f, 0.0f));
-			float noiseValueY = FMath::PerlinNoise2D(FVector2D((i + cx) * 0.1f, (j + cy) * 0.1f) + FVector2D(0.0f, time * 0.1f));
-			float vx = (noiseValueX * 2.0f - 1.0f) * AffectedVelocity;
-			float vy = (noiseValueY * 2.0f - 1.0f) * AffectedVelocity;
+			float noiseValueX = FMath::PerlinNoise2D(FVector2D((i + cx) * TurbulenceScale, (j + cy) * TurbulenceScale) + FVector2D(time * TurbulenceSpeed, 0.0f));
+			float noiseValueY = FMath::PerlinNoise2D(FVector2D((i + cx) * TurbulenceScale, (j + cy) * TurbulenceScale) + FVector2D(0.0f, time * TurbulenceSpeed));
+			float vx = (noiseValueX * 2.0f - 1.0f) * (AffectedVelocity * 1.2f);
+			float vy = (noiseValueY * 2.0f - 1.0f) * (AffectedVelocity * 1.2f);
 			AddVelocity(cx + i, cy + j, vx, vy);
 		}
 	}
+
 
 	StepSimulation();
 	FadeDensity();
@@ -105,8 +106,6 @@ void AFluidGrid::Tick(float DeltaSeconds)
 	RenderDensity();
 	RenderVelocity();
 }
-
-
 
 
 
@@ -129,13 +128,9 @@ void AFluidGrid::RenderDensity()
 		for (int32 x = 0; x < Size; x++)
 		{
 			float d = Density[IX(x, y)];
-			// Convert density to HSV color
-			float hue = FMath::Fmod(d + 50.0f, 255.0f) / 255.0f;
-			float saturation = 200.0f / 255.0f;
-			float brightness = d / 255.0f;
+			float intensity = FMath::Clamp(d / 255.0f, 0.0f, 1.0f);
 
-			FLinearColor linearColor = FLinearColor::MakeFromHSV8(hue * 255, saturation * 255, brightness * 255);
-			FColor color = linearColor.ToFColor(false);
+			FColor color = (intensity == 0.0f) ? FColor::Black : GetSmoothGradientColor(intensity);
 
 			ColorData[IX(x, y)] = color;
 		}
@@ -154,7 +149,6 @@ void AFluidGrid::RenderDensity()
 		}
 		);
 }
-
 
 void AFluidGrid::RenderVelocity()
 {
@@ -208,7 +202,6 @@ void AFluidGrid::LineTraceAndColor()
 			FVector EndPosition = WorldPosition + WorldDirection * 10000.0f;
 			bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, WorldPosition, EndPosition, ECC_Visibility, Params);
 
-
 			if (bHit && HitResult.Component == PlaneComponent)
 			{
 				FVector LocalHit = PlaneComponent->GetComponentTransform().InverseTransformPosition(HitResult.Location);
@@ -219,9 +212,21 @@ void AFluidGrid::LineTraceAndColor()
 				int32 ClampedGridX = FMath::Clamp(static_cast<int32>(GridPosition.X), 1, Size - 2);
 				int32 ClampedGridY = FMath::Clamp(static_cast<int32>(GridPosition.Y), 1, Size - 2);
 
-				// Adjust density and velocity at the hit point
-				AddDensity(ClampedGridX, ClampedGridY, AffectedDensity);
-				AddVelocity(ClampedGridX, ClampedGridY, AffectedVelocity, AffectedVelocity); // Example velocities
+				// Adjust density and velocity at the hit point and surrounding area
+				int32 Radius = 2;  // Smaller radius for the area of effect
+				for (int32 i = -Radius; i <= Radius; i++)
+				{
+					for (int32 j = -Radius; j <= Radius; j++)
+					{
+						int32 X = ClampedGridX + i;
+						int32 Y = ClampedGridY + j;
+						if (X >= 1 && X < Size - 1 && Y >= 1 && Y < Size - 1)
+						{
+							AddDensity(X, Y, AffectedDensity * 20.0f); // Further increase density
+							AddVelocity(X, Y, AffectedVelocity * FMath::FRandRange(10.0f, 20.0f), AffectedVelocity * FMath::FRandRange(10.0f, 20.0f)); // Further increase velocity with high randomness
+						}
+					}
+				}
 
 				StepSimulation();
 				UpdateRenderTarget();
@@ -229,6 +234,9 @@ void AFluidGrid::LineTraceAndColor()
 		}
 	}
 }
+
+
+
 
 
 void AFluidGrid::UpdateRenderTarget()
@@ -245,7 +253,7 @@ void AFluidGrid::UpdateRenderTarget()
 			float Intensity = FMath::Clamp(Value, 0.0f, 1.0f);
 
 			// Use the green gradient color function
-			FColor Color = GetGradientColor(Intensity);
+			FColor Color = GetSmoothGradientColor(Intensity);
 
 			ColorData[IX(x, y)] = Color;
 		}
@@ -264,30 +272,42 @@ void AFluidGrid::UpdateRenderTarget()
 		);
 }
 
-FColor AFluidGrid::GetGradientColor(float Intensity)
+FColor AFluidGrid::GetSmoothGradientColor(float Intensity)
 {
 	Intensity = FMath::Clamp(Intensity, 0.0f, 1.0f);
 
-	// Define the color gradient from blue to green to red
-	FVector StartColor(0, 0, 255);   // Blue
-	FVector MidColor(0, 255, 0);     // Green
-	FVector EndColor(255, 0, 0);     // Red
+	FVector4 Color1(0, 0, 255, 255);       // Blue
+	FVector4 Color2(0, 128, 255, 255);     // Light Blue
+	FVector4 Color3(0, 255, 128, 255);     // Light Green
+	FVector4 Color4(128, 255, 0, 255);     // Yellow-Green
+	FVector4 Color5(255, 128, 0, 255);     // Orange
+	FVector4 Color6(255, 0, 0, 255);       // Red
 
-	FVector Color;
+	FVector4 Color;
 
-	if (Intensity < 0.5f)
+	if (Intensity < 0.2f)
 	{
-		Color = FMath::Lerp(StartColor, MidColor, Intensity * 2.0f);
+		Color = FMath::Lerp(Color1, Color2, Intensity * 5.0f);
+	}
+	else if (Intensity < 0.4f)
+	{
+		Color = FMath::Lerp(Color2, Color3, (Intensity - 0.2f) * 5.0f);
+	}
+	else if (Intensity < 0.6f)
+	{
+		Color = FMath::Lerp(Color3, Color4, (Intensity - 0.4f) * 5.0f);
+	}
+	else if (Intensity < 0.8f)
+	{
+		Color = FMath::Lerp(Color4, Color5, (Intensity - 0.6f) * 5.0f);
 	}
 	else
 	{
-		Color = FMath::Lerp(MidColor, EndColor, (Intensity - 0.5f) * 2.0f);
+		Color = FMath::Lerp(Color5, Color6, (Intensity - 0.8f) * 5.0f);
 	}
 
-	return FColor(Color.X, Color.Y, Color.Z, 255);
+	return FColor(Color.X, Color.Y, Color.Z, Color.W);
 }
-
-
 
 void AFluidGrid::AddDensity(int32 x, int32 y, float amount)
 {
