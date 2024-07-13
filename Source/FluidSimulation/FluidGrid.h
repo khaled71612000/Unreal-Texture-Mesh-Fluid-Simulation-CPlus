@@ -26,14 +26,23 @@ private:
 	UPROPERTY(EditAnywhere)
 	int32 Size = 128;
 
-	UPROPERTY(EditAnywhere)
-	float Dt = 0.1f;
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	int32 AreaSize = 60;  // Adjust this value to make the affected area bigger
+
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	float AffectedDensity = 10;  // Amount of density to add
+
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	float AffectedVelocity = 2;  // Amount of velocity to add
 
 	UPROPERTY(EditAnywhere)
-	float Diffusion = 1.0f;
+	float Dt = 100.f;
 
 	UPROPERTY(EditAnywhere)
-	float Viscosity = 0.1f;
+	float Diffusion = 100.0f;
+
+	UPROPERTY(EditAnywhere)
+	float Viscosity = 10.f;
 
 	TArray<float> Density, Vx, Vy, Vz;
 
@@ -52,6 +61,9 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
 	UMaterial* BaseMaterial;
 
+	UPROPERTY(EditAnywhere)
+	float Scale = 100.0f;  // Adjust this scale factor as needed
+
 	void InitializeRenderTarget();
 	void UpdateRenderTarget();
 
@@ -66,4 +78,10 @@ private:
 
 	int32 IX(int32 x, int32 y) const;
 	void StepSimulation();
+	void AddRandomCentralVelocity(float magnitude);
+
+	void RenderDensity();
+	void RenderVelocity();
+	void FadeDensity();
+
 };
