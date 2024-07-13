@@ -19,22 +19,18 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
-	void HandleInput();
-	void LineTraceAndColor();
-
 private:
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
 	int32 Size = 256;
 
+	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
+	int32 AreaSize = 75;
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	int32 AreaSize = 75; // Smaller affected area
+	float AffectedDensity = 1.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float AffectedDensity = 1.0f;  // Reduced density value
-
-	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float AffectedVelocity = 31.0f;  // Reduced velocity for smoother effect
+	float AffectedVelocity = 31.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
 	float Dt = 10.1f;
@@ -50,6 +46,7 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
 	float TurbulenceSpeed = 1;
+
 	TArray<float> Density, Vx, Vy, Vz;
 
 	UPROPERTY(VisibleAnywhere)
@@ -62,19 +59,18 @@ private:
 	UStaticMeshComponent* PlaneComponent;
 
 	UPROPERTY(VisibleAnywhere)
-	UBoxComponent* CollisionBox;  // New collision box component
+	UBoxComponent* CollisionBox;
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
 	UMaterial* BaseMaterial;
 
 	UPROPERTY(EditAnywhere, Category = "Fluid Simulation")
-	float Scale = 150;  // Adjust this scale factor as needed
-
+	float Scale = 150;
 
 	void InitializeRenderTarget();
 	void UpdateRenderTarget();
-
-	FColor GetSmoothGradientColor(float Intensity);
+	void HandleInput();
+	void LineTraceAndColor();
 
 	void AddDensity(int32 x, int32 y, float amount);
 	void AddVelocity(int32 x, int32 y, float amountX, float amountY);
@@ -91,5 +87,5 @@ private:
 	void RenderDensity();
 	void RenderVelocity();
 	void FadeDensity();
-
+	FColor GetSmoothGradientColor(float Intensity);
 };
