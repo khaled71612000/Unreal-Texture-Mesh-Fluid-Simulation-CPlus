@@ -65,6 +65,9 @@ This project is inspired by and based on the fluid simulation techniques discuss
 - [Real-Time Fluid Dynamics for Games](https://www.dgp.toronto.edu/public_user/stam/reality/Research/pdf/GDC03.pdf) by Jos Stam
 
 Special thanks to these authors for their detailed explanations and insights into fluid dynamics simulation.
+[YouTube Video](https://youtu.be/W2d810dHGM8?si=tdzvJ25-kiccODCy)
+
+![GIF 2](https://media.giphy.com/media/uuVpe02tsJV21hmTqF/giphy.gif)
 
 ![image](https://github.com/user-attachments/assets/6a1a610a-328f-44d3-922c-1089eb5c82b2)
 ![image](https://github.com/user-attachments/assets/f41c514c-f1d5-457a-a170-bfedd688186b)
