@@ -1,3 +1,4 @@
+![image](https://github.com/user-attachments/assets/6a1a610a-328f-44d3-922c-1089eb5c82b2)
 # Fluid Simulation Project
 
 ## Overview
@@ -70,7 +71,7 @@ Special thanks to these authors for their detailed explanations and insights int
 ![GIF](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2d5NXlzbGFudDlkM3F4eGI1Y2ZjN3E0YTAwajd2YzdqaDY0dW5yYSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/uuVpe02tsJV21hmTqF/giphy-downsized.gif)
 
 
-![image](https://github.com/user-attachments/assets/6a1a610a-328f-44d3-922c-1089eb5c82b2)
+
 ![image](https://github.com/user-attachments/assets/f41c514c-f1d5-457a-a170-bfedd688186b)
 ![image](https://github.com/user-attachments/assets/b55749ad-6201-4c31-a8ad-fd1e4d586f19)
 ![image](https://github.com/user-attachments/assets/5517c1c6-7792-4335-b634-e3dd731d6999)
