@@ -5,6 +5,9 @@
 
 This project implements a 2D fluid simulation using Unreal Engine. The simulation is based on the Navier-Stokes equations and provides a visual representation of fluid dynamics.
 
+![GIF](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2d5NXlzbGFudDlkM3F4eGI1Y2ZjN3E0YTAwajd2YzdqaDY0dW5yYSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/uuVpe02tsJV21hmTqF/giphy-downsized.gif)
+
+
 ## Classes
 
 ### AFluidGrid
@@ -67,10 +70,6 @@ This project is inspired by and based on the fluid simulation techniques discuss
 
 Special thanks to these authors for their detailed explanations and insights into fluid dynamics simulation.
 [YouTube Video](https://youtu.be/W2d810dHGM8?si=tdzvJ25-kiccODCy)
-
-![GIF](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2d5NXlzbGFudDlkM3F4eGI1Y2ZjN3E0YTAwajd2YzdqaDY0dW5yYSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/uuVpe02tsJV21hmTqF/giphy-downsized.gif)
-
-
 
 ![image](https://github.com/user-attachments/assets/f41c514c-f1d5-457a-a170-bfedd688186b)
 ![image](https://github.com/user-attachments/assets/b55749ad-6201-4c31-a8ad-fd1e4d586f19)
